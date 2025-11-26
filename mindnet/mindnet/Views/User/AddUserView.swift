@@ -73,5 +73,5 @@ struct AddUserView: View {
 
 #Preview {
     AddUserView()
-        .modelContainer(for: [ModelUser.self, ModelNote.self], inMemory: true)
+        .modelContainer(for: [ModelUser.self, ModelMessage.self], inMemory: true)
 }

@@ -12,11 +12,12 @@ import SwiftData
 struct mindnetApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainTabView()
         }
         .modelContainer(for: [
             ModelUser.self,
-            ModelNote.self
+            ModelMessage.self,
+            ModelEvent.self
         ])
     }
 }

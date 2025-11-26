@@ -7,7 +7,8 @@
 
 import Foundation
 import SwiftData
-/// Ползователь/Контакт
+
+/// Пользователь/Контакт
 @Model
 public final class ModelUser: Identifiable {
     /// Уникальный идентификатор
@@ -31,14 +32,20 @@ public final class ModelUser: Identifiable {
     /// Теги — массив строк
     public var tags: [String]
 
-    /// Связанные заметки/воспоминания
-    public var notes: [ModelNote]
+    /// Личные заметки о пользователе
+    public var messages: [ModelMessage]
 
     /// Контакты (мессенджеры/ссылки) — словарь <тип, значение>
     public var contacts: [String: String]
 
     /// Фото (URL аватара)
     public var avatarUrl: URL?
+    
+    /// События, в которых участвует пользователь
+    public var events: [ModelEvent]
+    
+    /// Сообщения, написанные пользователем (комментарии в событиях)
+    public var authoredMessages: [ModelMessage]
 
     public init(
         id: UUID = UUID(),
@@ -48,9 +55,11 @@ public final class ModelUser: Identifiable {
         profession: String? = nil,
         skills: [String] = [],
         tags: [String] = [],
-        notes: [ModelNote] = [],
+        messages: [ModelMessage] = [],
         contacts: [String: String] = [:],
-        avatarUrl: URL? = nil
+        avatarUrl: URL? = nil,
+        events: [ModelEvent] = [],
+        authoredMessages: [ModelMessage] = []
     ) {
         self.id = id
         self.name = name
@@ -59,8 +68,10 @@ public final class ModelUser: Identifiable {
         self.profession = profession
         self.skills = skills
         self.tags = tags
-        self.notes = notes
+        self.messages = messages
         self.contacts = contacts
         self.avatarUrl = avatarUrl
+        self.events = events
+        self.authoredMessages = authoredMessages
     }
 }

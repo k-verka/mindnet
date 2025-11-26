@@ -71,14 +71,14 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
-        .modelContainer(for: [ModelUser.self, ModelNote.self])
+        .modelContainer(for: [ModelUser.self, ModelMessage.self])
 }
 
 // Если нужен preview с тестовыми данными:
 #Preview("С данными") {
     let container = try! ModelContainer(
         for: ModelUser.self,
-        ModelNote.self,
+        ModelMessage.self,
         configurations: ModelConfiguration(isStoredInMemoryOnly: true)
     )
     

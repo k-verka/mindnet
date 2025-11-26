@@ -12,7 +12,7 @@ struct UserDetailView: View {
     @Bindable var user: ModelUser
     @Environment(\.modelContext) private var context
     @State private var showingEditSheet = false
-    @State private var showingAddNote = false
+    @State private var showingAddMessage = false
     
     var body: some View {
         List {
@@ -125,36 +125,78 @@ struct UserDetailView: View {
                 }
             }
             
-            // Заметки
+            // События с этим человеком
+            if !user.events.isEmpty {
+                Section("События") {
+                    ForEach(user.events.sorted(by: { $0.eventDate > $1.eventDate })) { event in
+                        NavigationLink(destination: EventDetailView(event: event)) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(event.title)
+                                        .font(.headline)
+                                    Text(event.eventDate, style: .date)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Text("\(event.participants.count)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Image(systemName: "person.2.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Личные заметки
             Section {
-                Button(action: { showingAddNote = true }) {
+                Button(action: { showingAddMessage = true }) {
                     HStack {
                         Image(systemName: "plus.circle.fill")
                         Text("Добавить заметку")
                     }
                 }
                 
-                ForEach(user.notes.sorted(by: { $0.date > $1.date })) { note in
+                ForEach(user.messages.filter { $0.isPrivate }.sorted(by: { $0.date > $1.date })) { message in
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            Text(note.date, style: .date)
+                            Text(message.date, style: .date)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             
-                            if let eventType = note.eventType {
+                            if let eventType = message.eventType {
                                 Text("• \(eventType)")
                                     .font(.caption)
                                     .foregroundStyle(.blue)
                             }
                         }
                         
-                        Text(note.content)
+                        Text(message.content)
                             .font(.subheadline)
+                        
+                        // Показать фото если есть
+                        if !message.photoPaths.isEmpty {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(message.photoPaths, id: \.self) { path in
+                                        Image(systemName: "photo")
+                                            .font(.title3)
+                                            .foregroundStyle(.secondary)
+                                            .frame(width: 60, height: 60)
+                                            .background(Color.gray.opacity(0.2))
+                                            .cornerRadius(8)
+                                    }
+                                }
+                            }
+                        }
                     }
                     .padding(.vertical, 4)
                 }
             } header: {
-                Text("История взаимодействий")
+                Text("Личные заметки")
             }
         }
         .navigationBarTitleDisplayMode(.inline)
@@ -168,8 +210,8 @@ struct UserDetailView: View {
         .sheet(isPresented: $showingEditSheet) {
             EditUserView(user: user)
         }
-        .sheet(isPresented: $showingAddNote) {
-            AddNoteView(user: user)
+        .sheet(isPresented: $showingAddMessage) {
+            AddMessageView(user: user)
         }
     }
     
@@ -225,6 +267,7 @@ struct EditUserView: View {
                     Toggle("Дата рождения", isOn: $hasBirthdate)
                     if hasBirthdate {
                         DatePicker("", selection: $birthdate, displayedComponents: .date)
+                            .environment(\.locale, Locale(identifier: "ru_RU"))
                     }
                     
                     TextField("Город", text: $city)
@@ -303,7 +346,7 @@ struct EditUserView: View {
     }
 }
 
-struct AddNoteView: View {
+struct AddMessageView: View {
     let user: ModelUser
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -341,7 +384,7 @@ struct AddNoteView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Сохранить") {
-                        saveNote()
+                        saveMessage()
                     }
                     .disabled(content.isEmpty)
                 }
@@ -349,16 +392,28 @@ struct AddNoteView: View {
         }
     }
     
-    private func saveNote() {
-        let note = ModelNote(
+    private func saveMessage() {
+        let message = ModelMessage(
             content: content,
             date: date,
             eventType: eventType.isEmpty ? nil : eventType,
-            user: user
+            author: user,
+            relatedUser: user,
+            isPrivate: true
         )
         
-        context.insert(note)
-        user.notes.append(note)
+        context.insert(message)
+        user.messages.append(message)
         dismiss()
+    }
+}
+
+// Placeholder для EventDetailView (создадим на следующем шаге)
+struct EventDetailView: View {
+    let event: ModelEvent
+    
+    var body: some View {
+        Text("Event Detail - Coming soon")
+            .navigationTitle(event.title)
     }
 }
