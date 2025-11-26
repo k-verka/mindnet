@@ -434,15 +434,7 @@ struct AddMessageView: View {
     }
 }
 
-// Placeholder для EventDetailView (создадим на следующем шаге)
-struct EventDetailView: View {
-    let event: ModelEvent
-    
-    var body: some View {
-        Text("Event Detail - Coming soon")
-            .navigationTitle(event.title)
-    }
-}
+// EventDetailView теперь в отдельном файле EventDetailView.swift
 
 // MARK: - Add To Existing Event
 
