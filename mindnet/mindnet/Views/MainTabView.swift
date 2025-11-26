@@ -32,7 +32,6 @@ struct MainTabView: View {
     }
 }
 
-// Placeholder для EventListView (создадим дальше)
 struct EventListView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \ModelEvent.eventDate, order: .reverse) private var events: [ModelEvent]
@@ -71,7 +70,6 @@ struct EventListView: View {
     }
 }
 
-// Placeholder для EventRowView
 struct EventRowView: View {
     let event: ModelEvent
     
@@ -120,7 +118,6 @@ struct EventRowView: View {
     }
 }
 
-// Placeholder для ProfileView (опционально)
 struct ProfileView: View {
     var body: some View {
         NavigationStack {
@@ -131,27 +128,6 @@ struct ProfileView: View {
                 }
             }
             .navigationTitle("Профиль")
-        }
-    }
-}
-
-// Placeholder для AddEventView (создадим дальше)
-struct AddEventView: View {
-    @Environment(\.dismiss) private var dismiss
-    
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    Text("Создание события - Coming soon")
-                }
-            }
-            .navigationTitle("Новое событие")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Отмена") { dismiss() }
-                }
-            }
         }
     }
 }

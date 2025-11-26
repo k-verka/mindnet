@@ -13,6 +13,9 @@ struct UserDetailView: View {
     @Environment(\.modelContext) private var context
     @State private var showingEditSheet = false
     @State private var showingAddMessage = false
+    @State private var showingEventOptions = false
+    @State private var showingCreateEvent = false
+    @State private var showingAddToEvent = false
     
     var body: some View {
         List {
@@ -126,29 +129,35 @@ struct UserDetailView: View {
             }
             
             // События с этим человеком
-            if !user.events.isEmpty {
-                Section("События") {
-                    ForEach(user.events.sorted(by: { $0.eventDate > $1.eventDate })) { event in
-                        NavigationLink(destination: EventDetailView(event: event)) {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(event.title)
-                                        .font(.headline)
-                                    Text(event.eventDate, style: .date)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Text("\(event.participants.count)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Image(systemName: "person.2.fill")
+            Section {
+                // Кнопка создания события
+                Button(action: { showingEventOptions = true }) {
+                    Label("Создать событие с \(user.name)", systemImage: "calendar.badge.plus")
+                }
+                
+                // Список существующих событий
+                ForEach(user.events.sorted(by: { $0.eventDate > $1.eventDate })) { event in
+                    NavigationLink(destination: EventDetailView(event: event)) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(event.title)
+                                    .font(.headline)
+                                Text(event.eventDate, style: .date)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
+                            Spacer()
+                            Text("\(event.participants.count)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Image(systemName: "person.2.fill")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
+            } header: {
+                Text("События")
             }
             
             // Личные заметки
@@ -212,6 +221,23 @@ struct UserDetailView: View {
         }
         .sheet(isPresented: $showingAddMessage) {
             AddMessageView(user: user)
+        }
+        .sheet(isPresented: $showingCreateEvent) {
+            AddEventView(preselectedUser: user)
+        }
+        .confirmationDialog("Выберите действие", isPresented: $showingEventOptions) {
+            Button("Создать новое событие") {
+                showingCreateEvent = true
+            }
+            Button("Добавить в существующее") {
+                showingAddToEvent = true
+            }
+            Button("Отмена", role: .cancel) { }
+        } message: {
+            Text("Создайте новое событие с \(user.name) или добавьте в существующее")
+        }
+        .sheet(isPresented: $showingAddToEvent) {
+            AddToExistingEventView(user: user)
         }
     }
     
@@ -415,5 +441,119 @@ struct EventDetailView: View {
     var body: some View {
         Text("Event Detail - Coming soon")
             .navigationTitle(event.title)
+    }
+}
+
+// MARK: - Add To Existing Event
+
+struct AddToExistingEventView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
+    @Query private var allEvents: [ModelEvent]
+    
+    let user: ModelUser
+    @State private var searchText = ""
+    
+    // Получаем текущего пользователя (организатора)
+    @State private var currentUser: ModelUser?
+    
+    var availableEvents: [ModelEvent] {
+        allEvents.filter { event in
+            // Показываем только события где:
+            // 1. Пользователь еще не участник
+            // 2. Я являюсь организатором (могу добавлять людей)
+            !event.participants.contains(where: { $0.id == user.id }) &&
+            currentUser != nil &&
+            event.isCreator(currentUser!) &&
+            (searchText.isEmpty || event.title.localizedCaseInsensitiveContains(searchText))
+        }
+    }
+    
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(availableEvents) { event in
+                    Button(action: {
+                        addUserToEvent(event)
+                    }) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(event.title)
+                                    .font(.headline)
+                                    .foregroundStyle(.primary)
+                                
+                                Text(event.eventDate, style: .date)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                
+                                HStack(spacing: 8) {
+                                    Label("\(event.participants.count)", systemImage: "person.2.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                    
+                                    Text("Вы - Организатор")
+                                        .font(.caption2)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Color.green.opacity(0.2))
+                                        .cornerRadius(4)
+                                }
+                            }
+                            Spacer()
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                }
+            }
+            .searchable(text: $searchText, prompt: "Поиск события")
+            .navigationTitle("Добавить в событие")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Отмена") { dismiss() }
+                }
+            }
+            .overlay {
+                if availableEvents.isEmpty {
+                    ContentUnavailableView(
+                        "Нет доступных событий",
+                        systemImage: "calendar.badge.exclamationmark",
+                        description: Text("Создайте событие где вы организатор, чтобы добавлять участников")
+                    )
+                }
+            }
+            .onAppear {
+                currentUser = getOrCreateCurrentUser()
+            }
+        }
+    }
+    
+    private func addUserToEvent(_ event: ModelEvent) {
+        // Добавляем пользователя в участники
+        event.participants.append(user)
+        user.events.append(event)
+        
+        // Назначаем роль "participant"
+        event.participantRoles[user.id] = "participant"
+        
+        event.updatedAt = Date()
+        
+        try? context.save()
+        dismiss()
+    }
+    
+    private func getOrCreateCurrentUser() -> ModelUser? {
+        let fetchDescriptor = FetchDescriptor<ModelUser>(
+            predicate: #Predicate { $0.name == "Я" }
+        )
+        
+        if let existingUser = try? context.fetch(fetchDescriptor).first {
+            return existingUser
+        }
+        
+        let newUser = ModelUser(name: "Я")
+        context.insert(newUser)
+        return newUser
     }
 }
