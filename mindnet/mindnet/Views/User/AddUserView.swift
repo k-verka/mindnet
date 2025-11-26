@@ -6,23 +6,24 @@ struct AddUserView: View {
     @Environment(\.modelContext) private var context
 
     @State private var name: String = ""
-    @State private var birthdate: Date? = nil
+    @State private var hasBirthdate: Bool = false     // ← добавил
+    @State private var birthdate: Date = Date()       // ← убрал optional
     @State private var city: String = ""
     @State private var profession: String = ""
-    @State private var skillsText: String = "" // comma separated
-    @State private var tagsText: String = ""   // comma separated
+    @State private var skillsText: String = ""
+    @State private var tagsText: String = ""
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Основное") {
                     TextField("Имя", text: $name)
-                    DatePicker("День рождения", selection: Binding(get: {
-                        birthdate ?? Date()
-                    }, set: { newVal in
-                        birthdate = newVal
-                    }), displayedComponents: .date)
-                    .environment(\.locale, Locale(identifier: "ru_RU"))
+                    Toggle("Указать дату рождения", isOn: $hasBirthdate)
+                    if hasBirthdate {
+                        DatePicker("", selection: $birthdate, displayedComponents: .date)
+                            .environment(\.locale, Locale(identifier: "ru_RU"))
+                    }
+                    
                     TextField("Город", text: $city)
                     TextField("Профессия", text: $profession)
                 }
@@ -58,7 +59,7 @@ struct AddUserView: View {
 
         let user = ModelUser(
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-            birthdate: birthdate,
+            birthdate: hasBirthdate ? birthdate : nil,  // ← изменил
             city: city.isEmpty ? nil : city,
             profession: profession.isEmpty ? nil : profession,
             skills: skills,
