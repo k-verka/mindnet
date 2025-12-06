@@ -8,7 +8,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
+model User {       
   id          String    @id @default(uuid())
   name        String?
   avatar_url  String?
@@ -19,6 +19,8 @@ model User {
   contacts    Contact[]
   ideas       Idea[]
   commits     Commit[]
+  email    String?  @unique  
+  password String?     
 }
 
 model Contact {
@@ -30,6 +32,7 @@ model Contact {
   note        String?
   telegram    String?
   created_at  DateTime @default(now())
+  last_interaction DateTime?
 }
 
 model Idea {
