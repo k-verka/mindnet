@@ -8,13 +8,22 @@ const Mindnet = () => {
       parentId: null,
       createdAt: Date.now(),
       x: 0,
-      y: 0
+      y: 0,
+      text: 'Main Node',
+      status: 'neutral' // neutral, thinking, resolved, overthinking
     };
     
     return [mainNode];
   });
   
   const [selectedNodeId, setSelectedNodeId] = useState('main');
+  const [showModal, setShowModal] = useState(false);
+  const [editingNode, setEditingNode] = useState(null);
+  const [modalText, setModalText] = useState('');
+  const [scale, setScale] = useState(1);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [startPan, setStartPan] = useState({ x: 0, y: 0 });
   
   // Найти самый последний узел в системе (максимальный Y)
   const getLastNode = () => {
@@ -73,11 +82,64 @@ const Mindnet = () => {
       parentId,
       createdAt: Date.now(),
       x: newX,
-      y: newY
+      y: newY,
+      text: '',
+      status: 'neutral',
+      isNew: true // Флаг для анимации
     };
     
     setNodes([...nodes, newNode]);
     setSelectedNodeId(newNode.id);
+    
+    // Убираем флаг анимации через 600мс
+    setTimeout(() => {
+      setNodes(prev => prev.map(n => 
+        n.id === newNode.id ? { ...n, isNew: false } : n
+      ));
+    }, 600);
+  };
+  
+  const deleteNode = (nodeId) => {
+    if (nodeId === 'main') return; // Нельзя удалить главный узел
+    
+    // Находим все дочерние узлы (всю ветку)
+    const findChildren = (id) => {
+      const children = nodes.filter(n => n.parentId === id);
+      return [id, ...children.flatMap(child => findChildren(child.id))];
+    };
+    
+    const toDelete = findChildren(nodeId);
+    setNodes(prev => prev.filter(n => !toDelete.includes(n.id)));
+    
+    // Сброс выделения
+    if (toDelete.includes(selectedNodeId)) {
+      setSelectedNodeId('main');
+    }
+  };
+  
+  const openEditModal = (node) => {
+    setEditingNode(node);
+    setModalText(node.text || '');
+    setShowModal(true);
+  };
+  
+  const saveNodeEdit = () => {
+    if (!editingNode) return;
+    
+    setNodes(prev => prev.map(n => 
+      n.id === editingNode.id 
+        ? { ...n, text: modalText, createdAt: Date.now() } 
+        : n
+    ));
+    
+    setShowModal(false);
+    setEditingNode(null);
+    setModalText('');
+  };
+  
+  const handleNodeClick = (nodeId, e) => {
+    e.stopPropagation();
+    setSelectedNodeId(nodeId);
   };
   
   // Вычисляем границы для отрисовки
@@ -218,9 +280,47 @@ const Mindnet = () => {
     return lines;
   };
   
+  const handleWheel = (e) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = e.deltaY * -0.001;
+      const newScale = Math.min(Math.max(0.3, scale + delta), 3);
+      setScale(newScale);
+    }
+  };
+  
+  const handleMouseDown = (e) => {
+    if (e.button === 0 && (e.ctrlKey || e.metaKey)) {
+      setIsPanning(true);
+      setStartPan({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
+    }
+  };
+  
+  const handleMouseMove = (e) => {
+    if (isPanning) {
+      setPanOffset({
+        x: e.clientX - startPan.x,
+        y: e.clientY - startPan.y
+      });
+    }
+  };
+  
+  const handleMouseUp = () => {
+    setIsPanning(false);
+  };
+  
   const formatTime = (timestamp) => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  };
+  
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'thinking': return '#fbbf24'; // yellow
+      case 'resolved': return '#34d399'; // green
+      case 'overthinking': return '#f87171'; // red
+      default: return '#93c5fd'; // blue
+    }
   };
   
   const svgWidth = LEFT_PADDING + (bounds.maxX - bounds.minX + 1) * CELL_WIDTH + 100;
@@ -387,19 +487,35 @@ const Mindnet = () => {
         margin: '0 auto',
         padding: '0 40px 60px'
       }}>
-        <div style={{
-          background: 'rgba(30, 41, 59, 0.4)',
-          border: '1px solid rgba(148, 163, 184, 0.1)',
-          borderRadius: '16px',
-          padding: '40px',
-          backdropFilter: 'blur(8px)',
-          overflowX: 'auto'
-        }}>
-          <svg
-            width={svgWidth}
-            height={svgHeight}
-            style={{ display: 'block', margin: '0 auto' }}
-          >
+        <div 
+          style={{
+            background: 'rgba(30, 41, 59, 0.4)',
+            border: '1px solid rgba(148, 163, 184, 0.1)',
+            borderRadius: '16px',
+            padding: '40px',
+            backdropFilter: 'blur(8px)',
+            overflowX: 'auto',
+            overflowY: 'auto',
+            maxHeight: '70vh',
+            cursor: isPanning ? 'grabbing' : 'grab',
+            position: 'relative'
+          }}
+          onWheel={handleWheel}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+        >
+          <div style={{
+            transform: `scale(${scale}) translate(${panOffset.x / scale}px, ${panOffset.y / scale}px)`,
+            transformOrigin: 'center center',
+            transition: isPanning ? 'none' : 'transform 0.1s ease-out'
+          }}>
+            <svg
+              width={svgWidth}
+              height={svgHeight}
+              style={{ display: 'block', margin: '0 auto' }}
+            >
             {/* Временная шкала слева */}
             <g>
               {nodes.map((node, index) => {
@@ -484,26 +600,146 @@ const Mindnet = () => {
               const isSelected = node.id === selectedNodeId;
               const isMainNode = node.id === 'main';
               const isMainBranch = node.x === 0;
+              const statusColor = getStatusColor(node.status);
               
               return (
                 <g
                   key={node.id}
                   transform={`translate(${pos.x}, ${pos.y})`}
-                  onClick={() => setSelectedNodeId(node.id)}
-                  style={{ cursor: 'pointer' }}
+                  onClick={(e) => handleNodeClick(node.id, e)}
+                  style={{ 
+                    cursor: 'pointer',
+                    animation: node.isNew ? 'nodeAppear 0.6s ease-out' : 'none'
+                  }}
                 >
                   {/* Свечение при выборе */}
                   {isSelected && (
-                    <circle
-                      r={NODE_RADIUS + 8}
-                      fill="none"
-                      stroke="#60a5fa"
-                      strokeWidth="2"
-                      opacity="0.3"
-                      style={{
-                        animation: 'pulse 2s ease-in-out infinite'
-                      }}
-                    />
+                    <>
+                      <circle
+                        r={NODE_RADIUS + 8}
+                        fill="none"
+                        stroke="#60a5fa"
+                        strokeWidth="2"
+                        opacity="0.3"
+                        style={{
+                          animation: 'pulse 2s ease-in-out infinite'
+                        }}
+                      />
+                      
+                      {/* Контекстное меню при выборе */}
+                      <g transform={`translate(${NODE_RADIUS + 15}, -30)`}>
+                        {/* Редактировать */}
+                        <g 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditModal(node);
+                          }}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <rect
+                            x="0"
+                            y="0"
+                            width="28"
+                            height="28"
+                            rx="6"
+                            fill="rgba(59, 130, 246, 0.9)"
+                            style={{
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => e.target.setAttribute('fill', 'rgba(59, 130, 246, 1)')}
+                            onMouseLeave={(e) => e.target.setAttribute('fill', 'rgba(59, 130, 246, 0.9)')}
+                          />
+                          <text
+                            x="14"
+                            y="18"
+                            textAnchor="middle"
+                            style={{
+                              fontSize: '16px',
+                              fill: 'white',
+                              pointerEvents: 'none'
+                            }}
+                          >
+                            ✏️
+                          </text>
+                        </g>
+                        
+                        {/* Добавить ребёнка */}
+                        <g 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addNode();
+                          }}
+                          style={{ cursor: 'pointer' }}
+                          transform="translate(35, 0)"
+                        >
+                          <rect
+                            x="0"
+                            y="0"
+                            width="28"
+                            height="28"
+                            rx="6"
+                            fill="rgba(34, 197, 94, 0.9)"
+                            style={{
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => e.target.setAttribute('fill', 'rgba(34, 197, 94, 1)')}
+                            onMouseLeave={(e) => e.target.setAttribute('fill', 'rgba(34, 197, 94, 0.9)')}
+                          />
+                          <text
+                            x="14"
+                            y="18"
+                            textAnchor="middle"
+                            style={{
+                              fontSize: '16px',
+                              fill: 'white',
+                              pointerEvents: 'none'
+                            }}
+                          >
+                            ➕
+                          </text>
+                        </g>
+                        
+                        {/* Удалить ветку */}
+                        {!isMainNode && (
+                          <g 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (window.confirm('Delete this node and its children?')) {
+                                deleteNode(node.id);
+                              }
+                            }}
+                            style={{ cursor: 'pointer' }}
+                            transform="translate(70, 0)"
+                          >
+                            <rect
+                              x="0"
+                              y="0"
+                              width="28"
+                              height="28"
+                              rx="6"
+                              fill="rgba(239, 68, 68, 0.9)"
+                              style={{
+                                transition: 'all 0.2s ease'
+                              }}
+                              onMouseEnter={(e) => e.target.setAttribute('fill', 'rgba(239, 68, 68, 1)')}
+                              onMouseLeave={(e) => e.target.setAttribute('fill', 'rgba(239, 68, 68, 0.9)')}
+                            />
+                            <text
+                              x="14"
+                              y="18"
+                              textAnchor="middle"
+                              style={{
+                                fontSize: '16px',
+                                fill: 'white',
+                                pointerEvents: 'none'
+                              }}
+                            >
+                              🗑️
+                            </text>
+                          </g>
+                        )}
+                      </g>
+                    </>
                   )}
                   
                   {/* Внешнее кольцо */}
@@ -518,14 +754,26 @@ const Mindnet = () => {
                     }}
                   />
                   
-                  {/* Иконка внутри узла */}
+                  {/* Иконка внутри узла с цветом статуса */}
                   <circle
                     r={isMainNode ? 8 : 6}
-                    fill={isMainNode ? '#60a5fa' : (isMainBranch ? '#93c5fd' : '#a78bfa')}
+                    fill={statusColor}
                     style={{
-                      filter: isMainNode ? 'drop-shadow(0 0 4px rgba(96, 165, 250, 0.8))' : 'none'
+                      filter: isMainNode ? `drop-shadow(0 0 4px ${statusColor})` : 'none'
                     }}
                   />
+                  
+                  {/* Индикатор текста */}
+                  {node.text && (
+                    <circle
+                      cx={NODE_RADIUS - 6}
+                      cy={-NODE_RADIUS + 6}
+                      r={4}
+                      fill="#22c55e"
+                      stroke="rgba(30, 41, 59, 0.8)"
+                      strokeWidth="2"
+                    />
+                  )}
                   
                   {/* Номер узла */}
                   {!isMainNode && (
@@ -546,6 +794,95 @@ const Mindnet = () => {
               );
             })}
           </svg>
+          </div>
+          
+          {/* Zoom controls */}
+          <div style={{
+            position: 'absolute',
+            bottom: '20px',
+            right: '20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            background: 'rgba(30, 41, 59, 0.9)',
+            padding: '8px',
+            borderRadius: '8px',
+            border: '1px solid rgba(148, 163, 184, 0.2)'
+          }}>
+            <button
+              onClick={() => setScale(Math.min(scale + 0.2, 3))}
+              style={{
+                width: '32px',
+                height: '32px',
+                background: 'rgba(59, 130, 246, 0.8)',
+                border: 'none',
+                borderRadius: '4px',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '18px',
+                fontWeight: 'bold'
+              }}
+            >
+              +
+            </button>
+            <div style={{
+              fontSize: '11px',
+              color: '#94a3b8',
+              textAlign: 'center',
+              padding: '4px 0'
+            }}>
+              {Math.round(scale * 100)}%
+            </div>
+            <button
+              onClick={() => setScale(Math.max(scale - 0.2, 0.3))}
+              style={{
+                width: '32px',
+                height: '32px',
+                background: 'rgba(59, 130, 246, 0.8)',
+                border: 'none',
+                borderRadius: '4px',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '18px',
+                fontWeight: 'bold'
+              }}
+            >
+              −
+            </button>
+            <button
+              onClick={() => {
+                setScale(1);
+                setPanOffset({ x: 0, y: 0 });
+              }}
+              style={{
+                width: '32px',
+                height: '32px',
+                background: 'rgba(148, 163, 184, 0.8)',
+                border: 'none',
+                borderRadius: '4px',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '16px'
+              }}
+            >
+              ⟲
+            </button>
+          </div>
+          
+          {/* Pan hint */}
+          <div style={{
+            position: 'absolute',
+            bottom: '20px',
+            left: '20px',
+            fontSize: '11px',
+            color: '#64748b',
+            background: 'rgba(30, 41, 59, 0.9)',
+            padding: '8px 12px',
+            borderRadius: '6px',
+            border: '1px solid rgba(148, 163, 184, 0.2)'
+          }}>
+            💡 Ctrl+Scroll to zoom • Ctrl+Drag to pan
+          </div>
         </div>
         
         {/* Легенда */}
@@ -587,6 +924,193 @@ const Mindnet = () => {
         </div>
       </div>
       
+      {/* Модальное окно редактирования */}
+      {showModal && (
+        <div 
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            animation: 'fadeIn 0.2s ease-out'
+          }}
+          onClick={() => setShowModal(false)}
+        >
+          <div 
+            style={{
+              background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
+              border: '1px solid rgba(148, 163, 184, 0.2)',
+              borderRadius: '16px',
+              padding: '32px',
+              maxWidth: '600px',
+              width: '90%',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+              animation: 'slideUp 0.3s ease-out'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{
+              margin: '0 0 24px 0',
+              fontSize: '24px',
+              fontWeight: 700,
+              color: '#e2e8f0',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <span style={{
+                width: '32px',
+                height: '32px',
+                background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '18px'
+              }}>
+                ✏️
+              </span>
+              Edit Node
+            </h2>
+            
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                color: '#94a3b8',
+                marginBottom: '8px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                fontWeight: 600
+              }}>
+                Thought Content
+              </label>
+              <textarea
+                value={modalText}
+                onChange={(e) => setModalText(e.target.value)}
+                placeholder="Write your thought here..."
+                autoFocus
+                style={{
+                  width: '100%',
+                  minHeight: '150px',
+                  padding: '16px',
+                  background: 'rgba(15, 23, 42, 0.6)',
+                  border: '1px solid rgba(148, 163, 184, 0.2)',
+                  borderRadius: '12px',
+                  color: '#e2e8f0',
+                  fontSize: '15px',
+                  fontFamily: 'inherit',
+                  resize: 'vertical',
+                  outline: 'none',
+                  transition: 'all 0.2s ease'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#60a5fa';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(96, 165, 250, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = 'rgba(148, 163, 184, 0.2)';
+                  e.target.style.boxShadow = 'none';
+                }}
+              />
+            </div>
+            
+            <div style={{
+              marginBottom: '24px',
+              display: 'flex',
+              gap: '12px',
+              flexWrap: 'wrap'
+            }}>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                color: '#94a3b8',
+                marginBottom: '8px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                fontWeight: 600,
+                width: '100%'
+              }}>
+                Status
+              </label>
+              {['neutral', 'thinking', 'resolved', 'overthinking'].map(status => (
+                <button
+                  key={status}
+                  onClick={() => {
+                    setNodes(prev => prev.map(n => 
+                      n.id === editingNode.id ? { ...n, status } : n
+                    ));
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    background: editingNode?.status === status 
+                      ? `linear-gradient(135deg, ${getStatusColor(status)}, ${getStatusColor(status)}dd)` 
+                      : 'rgba(30, 41, 59, 0.6)',
+                    border: `2px solid ${editingNode?.status === status ? getStatusColor(status) : 'rgba(148, 163, 184, 0.2)'}`,
+                    borderRadius: '8px',
+                    color: 'white',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    textTransform: 'capitalize',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {status}
+                </button>
+              ))}
+            </div>
+            
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={() => setShowModal(false)}
+                style={{
+                  padding: '12px 24px',
+                  background: 'rgba(148, 163, 184, 0.2)',
+                  border: '1px solid rgba(148, 163, 184, 0.3)',
+                  borderRadius: '8px',
+                  color: '#e2e8f0',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveNodeEdit}
+                style={{
+                  padding: '12px 24px',
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* CSS анимация */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap');
@@ -602,6 +1126,40 @@ const Mindnet = () => {
           }
         }
         
+        @keyframes nodeAppear {
+          0% {
+            opacity: 0;
+            transform: scale(0.5);
+          }
+          60% {
+            transform: scale(1.1);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+        
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+        
+        @keyframes slideUp {
+          from {
+            transform: translateY(40px);
+            opacity: 0;
+          }
+          to {
+            transform: translateY(0);
+            opacity: 1;
+          }
+        }
+        
         * {
           margin: 0;
           padding: 0;
@@ -610,6 +1168,24 @@ const Mindnet = () => {
         
         body {
           overflow-x: hidden;
+        }
+        
+        textarea::-webkit-scrollbar {
+          width: 8px;
+        }
+        
+        textarea::-webkit-scrollbar-track {
+          background: rgba(15, 23, 42, 0.4);
+          border-radius: 4px;
+        }
+        
+        textarea::-webkit-scrollbar-thumb {
+          background: rgba(96, 165, 250, 0.4);
+          border-radius: 4px;
+        }
+        
+        textarea::-webkit-scrollbar-thumb:hover {
+          background: rgba(96, 165, 250, 0.6);
         }
       `}</style>
     </div>
